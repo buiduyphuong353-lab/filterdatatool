@@ -1,97 +1,62 @@
 import streamlit as st
-import pandas as pd
-import numpy as np
+import json
+import csv
+import math
 from datetime import datetime
 
-# --- CẤU HÌNH TRANG ---
-st.set_page_config(page_title="AI Data Cleaner", layout="wide", page_icon="🌱")
+# --- COPY TOÀN BỘ CÁC HÀM LOGIC CỦA BẠN VÀO ĐÂY ---
+# (boc_tach_va_tinh_trung_binh, parse_time, safe_float...)
 
-# --- HÀM TIỀN XỬ LÝ ---
-def boc_tach_va_tinh_trung_binh(gia_tri):
-    if pd.isna(gia_tri) or gia_tri == "" or gia_tri == 0:
-        return 0.0
-    gia_tri_str = str(gia_tri).strip()
-    if "/" in gia_tri_str:
-        cac_cum = gia_tri_str.split()
-        danh_sach = []
-        for cum in cac_cum:
-            if "/" in cum:
-                try:
-                    danh_sach.append(float(cum.split("/")[1]))
-                except: pass
-        if danh_sach: return round(sum(danh_sach) / len(danh_sach), 3)
-    try: return float(gia_tri_str)
-    except: return 0.0
+st.set_page_config(page_title="Máy Chém Rác Dữ Liệu", layout="wide")
 
-# --- GIAO DIỆN ---
-st.title("🚀 Máy Chém Rác Dữ Liệu & Hiệu Chuẩn AI")
+st.title("🚀 Hệ thống Xử lý Dữ liệu Nhỏ giọt AH4")
+st.markdown("---")
 
-col_up1, col_up2 = st.columns(2)
-with col_up1:
-    file_goc = st.file_uploader("Upload file 'Lich nho giotj.json'", type=['json'])
-with col_up2:
-    file_champhan = st.file_uploader("Upload file 'châm phân trung gian.json'", type=['json'])
+# 1. Sidebar - Nơi nạp dữ liệu
+with st.sidebar:
+    st.header("📂 Nạp Dữ Liệu")
+    uploaded_goc = st.file_uploader("Lịch sử nhỏ giọt (JSON)", type="json")
+    uploaded_cp = st.file_uploader("Châm phân trung gian (JSON)", type="json")
+    
+    st.header("⚙️ Cài đặt bộ lọc")
+    loc_thieu = st.checkbox("Bỏ qua dòng không có châm phân", value=True)
+    du_5_lan = st.checkbox("Chỉ lấy ngày ≥ 5 lần đọc tốt", value=True)
+    chuan_hoa_ai = st.checkbox("Hiệu chuẩn AI ([-1, 1])", value=True)
 
-# Chỉ chạy logic phía dưới nếu ĐÃ UPLOAD ĐỦ 2 FILE
-if file_goc and file_champhan:
-    try:
-        df_goc = pd.read_json(file_goc)
-        df_champhan = pd.read_json(file_champhan)
+# 2. Xử lý Logic (Chỉ chạy khi có đủ 2 file)
+if uploaded_goc and uploaded_cp:
+    # Đọc file (Streamlit dùng BytesIO nên cần load qua json)
+    list_goc = json.load(uploaded_goc)
+    list_champhan = json.load(uploaded_cp)
+    
+    # [Thực hiện toàn bộ logic tiền xử lý và ghép bảng ở đây]
+    # Giả sử sau khi ghép xong bạn có biến: df_tong (dạng list of dicts)
+    
+    # 3. Giao diện chọn Vườn và Cột
+    st.subheader("📊 Tùy chỉnh xuất dữ liệu")
+    
+    all_stt = sorted(list(set(str(d.get('STT')) for d in df_tong)))
+    chon_stt = st.multiselect("Chọn Vườn (STT):", options=["Tất cả"] + all_stt, default=["Tất cả"])
+    
+    # Lấy danh sách cột để người dùng tích chọn
+    all_cols = sorted(list(df_tong[0].keys())) # Lấy từ dòng đầu tiên
+    cot_chon = st.multiselect("Chọn thông số muốn giữ lại:", options=all_cols, default=['STT', 'Thời gian', 'EC_Goc', 'PH_Goc'])
 
-        for df in [df_goc, df_champhan]:
-            df['Thời gian'] = pd.to_datetime(df['Thời gian'], format='%Y-%m-%d %H-%M-%S', errors='coerce')
-            df['STT'] = df['STT'].astype(str)
-            df.sort_values('Thời gian', inplace=True)
-
-        df_tong = pd.merge_asof(
-            df_goc, df_champhan, on='Thời gian', by='STT', 
-            direction='nearest', tolerance=pd.Timedelta(minutes=60), 
-            suffixes=('_Goc', '_ChamPhan')
-        )
-
-        # Cài đặt bộ lọc
-        st.sidebar.header("⚙️ Cài đặt")
-        check_loc_5 = st.sidebar.checkbox("Chỉ lấy ngày ≥ 5 lần đọc tốt", value=True)
-        check_ai = st.sidebar.checkbox("Hiệu chuẩn AI ([-1,1])", value=True)
-
-        tu_khoa_an = ['NGƯỠNG', 'BỒN', 'LƯU LƯỢNG', 'THỜI GIAN MỞ', 'BƠM', 'VAN', '_ID']
-        cot_kha_thi = [c for c in df_tong.columns if not any(tk in c.upper() for tk in tu_khoa_an)]
+    if st.button("🚀 BẮT ĐẦU XỬ LÝ"):
+        # [Thực hiện logic lọc df_clean như code cũ của bạn]
         
-        st.markdown("### 1. Cấu hình thông số")
-        selected_stt = st.multiselect("Chọn Vườn:", options=sorted(df_tong['STT'].unique()), default=sorted(df_tong['STT'].unique()))
-        selected_cols = st.multiselect("Chọn cột giữ lại:", options=cot_kha_thi, default=['STT', 'Thời gian', 'EC_Goc', 'PH_Goc'])
-
-        if st.button("🔥 BẮT ĐẦU XỬ LÝ"):
-            df_final = df_tong[df_tong['STT'].isin(selected_stt)].copy()
-            df_final = df_final[selected_cols] 
-
-            for col in selected_cols:
-                if col not in ['Thời gian', 'STT']:
-                    df_final[col] = df_final[col].apply(boc_tach_va_tinh_trung_binh)
-                    df_final[col] = pd.to_numeric(df_final[col], errors='coerce')
-                    # Lọc rác
-                    if 'PH' in col.upper():
-                        df_final = df_final[(df_final[col] > 0) & (df_final[col] <= 14)]
-                    elif 'EC' in col.upper():
-                        df_final = df_final[(df_final[col] > 0) & (df_final[col] <= 10000)]
-
-            if check_loc_5:
-                df_final['Ngay_Tam'] = df_final['Thời gian'].dt.date
-                counts = df_final.groupby(['STT', 'Ngay_Tam']).size().reset_index(name='C')
-                ok_days = counts[counts['C'] >= 5]
-                df_final = df_final.merge(ok_days[['STT', 'Ngay_Tam']], on=['STT', 'Ngay_Tam'], how='inner')
-                df_final.drop(columns=['Ngay_Tam'], inplace=True)
-
-            if not df_final.empty:
-                st.success(f"✅ Đã xử lý {len(df_final)} dòng.")
-                st.dataframe(df_final.head(20), use_container_width=True) # Hiển thị bảng gọn gàng
-
-                # Nút tải file
-                csv_goc = df_final.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')
-                st.download_button("📥 Tải File Gốc Sạch", data=csv_goc, file_name="Data_Sach.csv", mime='text/csv')
-            else:
-                st.error("Dữ liệu sau lọc trống rỗng!")
-    except Exception as e:
-        st.error(f"Lỗi xử lý: {e}")
+        # 4. Hiển thị kết quả
+        st.success(f"Đã xử lý xong! Tìm thấy {len(df_clean)} dòng đạt chuẩn.")
+        st.table(df_clean[:10]) # Hiển thị 10 dòng đầu
+        
+        # 5. Nút Download
+        # Biến list thành CSV string để tải về
+        csv_data = convert_to_csv_string(df_clean) # Hàm tự viết dùng thư viện csv
+        st.download_button(
+            label="📥 Tải xuống File Gốc (.csv)",
+            data=csv_data,
+            file_name="data_clean.csv",
+            mime="text/csv"
+        )
 else:
-    st.warning("👈 Vui lòng upload file để bắt đầu.")
+    st.info("Vui lòng tải lên cả 2 file JSON để bắt đầu.")
