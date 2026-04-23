@@ -30,7 +30,7 @@ def parse_time(t_str):
 
 # --- 2. GIAO DIỆN STREAMLIT ---
 st.set_page_config(page_title="Hệ thống Xử lý Dữ liệu AH4", layout="wide")
-st.title("🚀 Hệ thống Xử lý Dữ liệu Nhỏ giọt AH4")
+st.title("🚀 Hệ thống Xử lý Dữ liệu ")
 
 # Sidebar
 with st.sidebar:
