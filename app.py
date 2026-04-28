@@ -98,7 +98,7 @@ if uploaded_files:
     '_ID', 'TIME_OBJ', 'DURATION_SEC', 'LỊCH TRÌNH',
     'STT', 'THỜI GIAN', 'BỒN', 'NGƯỠNG',
     'CHÊNH LỆCH', 'NGƯỜI', 'TRẠNG THÁI',
-    'LƯU LƯỢNG', 'PHƯƠNG THỨC'
+    'LƯU LƯỢNG', 'PHƯƠNG THỨC', 'id', 'BƠM', 'Người điều khiển', 'Tên khu'
 ]
 
 cot = [
