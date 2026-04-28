@@ -1,151 +1,220 @@
 import streamlit as st
-import os
-import json
-import csv
-import math
-import re
-import unicodedata
+import json, math, re, unicodedata, bisect
 from datetime import datetime
-import bisect
 import pandas as pd
 
 st.set_page_config(page_title="Xử lý dữ liệu tưới", layout="wide")
 st.title("🚀 Dashboard xử lý & chuẩn hóa dữ liệu AI")
 
 # ==========================================
-# 1. HÀM CÔNG CỤ
+# HÀM TIỆN ÍCH
 # ==========================================
 def remove_accents(text):
     return "".join([c for c in unicodedata.normalize('NFKD', str(text)) if not unicodedata.combining(c)])
 
+def normalize_text(s):
+    return remove_accents(s).upper()
+
 def doc_json_sieu_bu(file):
-    raw_text = file.read().decode("utf-8-sig")
+    raw = file.read().decode("utf-8-sig")
     try:
-        return json.loads(raw_text)
+        return json.loads(raw)
     except:
-        text_clean = re.sub(r',\s*\]', ']', raw_text)
-        text_clean = re.sub(r',\s*\}', '}', text_clean)
+        raw = re.sub(r',\s*\]', ']', raw)
+        raw = re.sub(r',\s*\}', '}', raw)
         try:
-            return json.loads(text_clean)
+            return json.loads(raw)
         except:
             return []
 
-def parse_time(t_str):
-    if not t_str: return None
-    for fmt in ['%Y-%m-%d %H-%M-%S', '%Y-%m-%d %H:%M:%S']:
-        try: return datetime.strptime(str(t_str)[:19], fmt)
-        except: continue
+def parse_time(t):
+    if not t: return None
+    for fmt in ['%Y-%m-%d %H-%M-%S','%Y-%m-%d %H:%M:%S']:
+        try: return datetime.strptime(str(t)[:19], fmt)
+        except: pass
     return None
 
 def boc_tach_sach(val):
-    if val in [None, "", "0"]: return 0.0
+    if val in [None,"","0"]: return 0.0
     s = str(val)
     if "/" in s:
-        nums = [float(c.split("/")[1]) for c in s.split() if "/" in c]
+        nums = [float(x.split("/")[1]) for x in s.split() if "/" in x]
         return sum(nums)/len(nums) if nums else 0.0
     try: return float(s)
     except: return 0.0
 
 # ==========================================
-# 2. UPLOAD FILE
+# UPLOAD FILE
 # ==========================================
-uploaded_files = st.file_uploader("📂 Tải nhiều file JSON", type=["json"], accept_multiple_files=True)
+files = st.file_uploader("📂 Upload JSON", type="json", accept_multiple_files=True)
 
-if uploaded_files:
+if files:
 
-    list_goc = []
-    list_vetinh = []
+    list_goc, list_vt = [], []
 
-    for file in uploaded_files:
-        data = doc_json_sieu_bu(file)
-        if any(k in remove_accents(file.name.lower()) for k in ["lich", "goc"]):
+    for f in files:
+        data = doc_json_sieu_bu(f)
+        if any(k in normalize_text(f.name) for k in ["LICH","GOC"]):
             list_goc.extend(data)
         else:
-            list_vetinh.extend(data)
+            list_vt.extend(data)
 
     # ==========================================
-    # 3. XỬ LÝ
+    # XỬ LÝ VỆ TINH
     # ==========================================
     dict_vt = {}
-    for vt in list_vetinh:
-        stt = str(vt.get('STT', ''))
-        t_obj = parse_time(vt.get('Thời gian'))
-        if t_obj:
-            vt['Time_Obj'] = t_obj
+    keys_vt = set()
+
+    for vt in list_vt:
+        stt = str(vt.get("STT",""))
+        t = parse_time(vt.get("Thời gian"))
+        if t:
+            vt["Time_Obj"] = t
             dict_vt.setdefault(stt, []).append(vt)
+            keys_vt.update(vt.keys())
 
     for stt in dict_vt:
-        dict_vt[stt].sort(key=lambda x: x['Time_Obj'])
+        dict_vt[stt].sort(key=lambda x: x["Time_Obj"])
 
+    # ==========================================
+    # XỬ LÝ GỐC
+    # ==========================================
     df_processed = []
+    thong_ke_ngay = {}
+    keys_goc = set()
+
     for g in list_goc:
-        t_obj = parse_time(g.get('Thời gian'))
-        if not t_obj: continue
-        g['Time_Obj'] = t_obj
+        t = parse_time(g.get("Thời gian"))
+        if not t: continue
+
+        g["Time_Obj"] = t
+        g["Duration_Sec"] = 60  # giả định
+
         df_processed.append(g)
+        keys_goc.update(g.keys())
 
-    danh_sach_vuon = sorted(list(set(str(r.get('STT', '')) for r in df_processed)))
-    chon_stt = st.multiselect("🌱 Chọn vườn", ["Tất cả"] + danh_sach_vuon, default=["Tất cả"])
+        if g["Duration_Sec"] >= 40:
+            key = (str(g.get("STT","")), t.strftime("%Y-%m-%d"))
+            thong_ke_ngay[key] = thong_ke_ngay.get(key,0)+1
 
-    check_khat_khe = st.checkbox("🚫 Bỏ dòng thiếu dữ liệu", True)
+    # ==========================================
+    # LỌC CỘT
+    # ==========================================
+    tu_khoa_an = [
+        '_ID','TIME_OBJ','DURATION_SEC','LỊCH TRÌNH','STT','THỜI GIAN',
+        'BỒN','NGƯỠNG','CHÊNH LỆCH','NGƯỜI','TRẠNG THÁI',
+        'LƯU LƯỢNG','PHƯƠNG THỨC'
+    ]
 
-    # lấy key
-    keys = set()
-    for r in df_processed:
-        keys.update(r.keys())
+    cot_goc = [k for k in keys_goc if not any(normalize_text(tk) in normalize_text(k) for tk in tu_khoa_an)]
+    cot_vt  = [k for k in keys_vt if not any(normalize_text(tk) in normalize_text(k) for tk in tu_khoa_an)]
 
-   cot = [k for k in keys if k not in ['STT', 'Thời gian', 'Time_Obj']]
+    cot_all = sorted(set(cot_goc + cot_vt))
+
+    # ==========================================
+    # UI
+    # ==========================================
+    ds_vuon = sorted(set(str(r.get("STT","")) for r in df_processed))
+    chon_stt = st.multiselect("🌱 Chọn vườn", ["Tất cả"] + ds_vuon, ["Tất cả"])
+
+    check_day = st.checkbox("⚠️ Ngày ≥ 5 cử", True)
+    check_strict = st.checkbox("🚫 Bỏ dòng thiếu data", True)
 
     st.subheader("📊 Chọn cột")
     cot_lay = []
-    for c in cot:
+    for c in cot_all:
         if st.checkbox(c, value=("EC" in c or "PH" in c)):
             cot_lay.append(c)
 
     # ==========================================
-    # 4. XỬ LÝ + XUẤT
+    # XỬ LÝ
     # ==========================================
-    if st.button("🚀 Xử lý & xuất file"):
+    if st.button("🚀 Xử lý"):
 
-        final_data = []
+        final = []
 
         for g in df_processed:
-            stt = str(g.get('STT', ''))
-            if 'Tất cả' not in chon_stt and stt not in chon_stt:
+            stt = str(g.get("STT",""))
+            if "Tất cả" not in chon_stt and stt not in chon_stt:
                 continue
 
-            row = {
-                "STT": stt,
-                "Thời gian": g.get('Thời gian')
-            }
+            if check_day:
+                key = (stt, g["Time_Obj"].strftime("%Y-%m-%d"))
+                if key not in thong_ke_ngay or thong_ke_ngay[key] < 5:
+                    continue
 
+            row = {"STT": stt, "Thời gian": g["Thời gian"]}
+
+            # GỐC
+            ok_goc = False
             for c in cot_lay:
-                row[c] = boc_tach_sach(g.get(c))
+                val = boc_tach_sach(g.get(c))
+                if val != 0: ok_goc = True
+                row[c+"_Goc"] = val
 
-            final_data.append(row)
+            if check_strict and not ok_goc:
+                continue
 
-        if not final_data:
-            st.warning("Không có dữ liệu")
+            # VỆ TINH (match gần nhất)
+            vt_list = dict_vt.get(stt, [])
+            best = None
+
+            if vt_list:
+                times = [x["Time_Obj"] for x in vt_list]
+                idx = bisect.bisect_left(times, g["Time_Obj"])
+
+                cand = []
+                if idx < len(times): cand.append(vt_list[idx])
+                if idx > 0: cand.append(vt_list[idx-1])
+
+                best = min(cand, key=lambda x: abs((x["Time_Obj"]-g["Time_Obj"]).total_seconds()))
+
+            ok_vt = False
+            for c in cot_lay:
+                val = boc_tach_sach(best.get(c)) if best else 0
+                if val != 0: ok_vt = True
+                row[c+"_VT"] = val
+
+            if check_strict and not ok_vt:
+                continue
+
+            final.append(row)
+
+        if not final:
+            st.warning("❌ Không có dữ liệu")
         else:
-            # chuẩn hóa
-            final_norm = []
-            for row in final_data:
-                new_row = row.copy()
-                t_obj = parse_time(row['Thời gian'])
+            df = pd.DataFrame(final)
 
-                if t_obj:
-                    t = t_obj.hour + t_obj.minute/60
-                    new_row['Time_Sin'] = math.sin(2*math.pi*t/24)
-                    new_row['Time_Cos'] = math.cos(2*math.pi*t/24)
+            # ==========================================
+            # CHUẨN HÓA AI
+            # ==========================================
+            df_norm = df.copy()
 
-                final_norm.append(new_row)
+            for col in df.columns:
+                if col in ["STT","Thời gian"]: continue
+                vals = df[col]
+                mn, mx = vals.min(), vals.max()
+                if mx == mn: mx = mn + 1
+                df_norm[col] = 2*((vals-mn)/(mx-mn))-1
 
-            df1 = pd.DataFrame(final_data)
-            df2 = pd.DataFrame(final_norm)
+            # sin cos time
+            sin_list, cos_list = [], []
+            for t in df["Thời gian"]:
+                dt = parse_time(t)
+                if dt:
+                    h = dt.hour + dt.minute/60
+                    sin_list.append(math.sin(2*math.pi*h/24))
+                    cos_list.append(math.cos(2*math.pi*h/24))
+                else:
+                    sin_list.append(0)
+                    cos_list.append(0)
 
-            st.success(f"✅ Xong {len(df1)} dòng")
+            df_norm["Time_Sin"] = sin_list
+            df_norm["Time_Cos"] = cos_list
 
-            st.dataframe(df1.head())
+            st.success(f"✅ {len(df)} dòng")
 
-            st.download_button("📥 Tải file thường", df1.to_csv(index=False), "data_thuong.csv")
-            st.download_button("📥 Tải file AI", df2.to_csv(index=False), "data_ai.csv")
+            st.dataframe(df.head())
+
+            st.download_button("📥 CSV thường", df.to_csv(index=False), "data.csv")
+            st.download_button("📥 CSV AI", df_norm.to_csv(index=False), "data_ai.csv")
