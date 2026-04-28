@@ -94,7 +94,17 @@ if uploaded_files:
     for r in df_processed:
         keys.update(r.keys())
 
-    cot = [k for k in keys if k not in ['STT', 'Thời gian', 'Time_Obj']]
+    tu_khoa_an = [
+    '_ID', 'TIME_OBJ', 'DURATION_SEC', 'LỊCH TRÌNH',
+    'STT', 'THỜI GIAN', 'BỒN', 'NGƯỠNG',
+    'CHÊNH LỆCH', 'NGƯỜI', 'TRẠNG THÁI',
+    'LƯU LƯỢNG', 'PHƯƠNG THỨC'
+]
+
+cot = [
+    k for k in keys
+    if not any(tk in k.upper() for tk in tu_khoa_an)
+]
 
     st.subheader("📊 Chọn cột")
     cot_lay = []
