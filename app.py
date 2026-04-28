@@ -94,11 +94,11 @@ if uploaded_files:
     for r in df_processed:
         keys.update(r.keys())
 
-    tu_khoa_an = [
+   tu_khoa_an = [
     '_ID', 'TIME_OBJ', 'DURATION_SEC', 'LỊCH TRÌNH',
     'STT', 'THỜI GIAN', 'BỒN', 'NGƯỠNG',
     'CHÊNH LỆCH', 'NGƯỜI', 'TRẠNG THÁI',
-    'LƯU LƯỢNG', 'PHƯƠNG THỨC', 'id', 'BƠM', 'Người điều khiển', 'Tên khu'
+    'LƯU LƯỢNG', 'PHƯƠNG THỨC'
 ]
 
 cot = [
